@@ -5,6 +5,7 @@
 - [Simple English project brief](<Airbnb Project brief/Project Brief - Simple English.md>)
 - [Detailed bilingual project brief](<Airbnb Project brief/Project Brief.md>)
 - [Original English project brief PDF](<Airbnb Project brief/airbnb project brief.pdf>)
+- [Data cleaning notes and workflow](data-cleaning/README.md)
 
 ## Data
 
