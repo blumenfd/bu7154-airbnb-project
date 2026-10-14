@@ -28,6 +28,7 @@ MISSINGNESS_THRESHOLD = 0.50
 # Columns with more than 50% missing values are removed from this candidate set.
 USEFUL_LISTING_COLUMNS = [
     "id",
+    "last_scraped",
     "description",
     "host_id",
     "hosts_time_as_user_years",
@@ -61,6 +62,9 @@ USEFUL_LISTING_COLUMNS = [
     "availability_90",
     "availability_365",
     "number_of_reviews",
+    "number_of_reviews_ltm",
+    "number_of_reviews_l30d",
+    "number_of_reviews_ly",
     "first_review",
     "last_review",
     "review_scores_rating",
@@ -82,6 +86,7 @@ TRANSFORMED_SOURCE_COLUMNS = {
     "bathrooms_text",
     "first_review",
     "last_review",
+    "last_scraped",
 }
 
 
@@ -126,26 +131,54 @@ def months_from_years_and_months(years: pd.Series, months: pd.Series) -> pd.Seri
     return years_numeric * 12 + months_numeric
 
 
-def review_summary(reviews: pd.DataFrame, listing_ids: pd.Series) -> pd.DataFrame:
-    """Aggregate review rows and include zero-review listings for reconciliation."""
-    grouped = (
-        reviews.assign(
-            comment_length=reviews["comments"].fillna("").astype(str).str.len(),
-            review_date=pd.to_datetime(reviews["date"], errors="coerce"),
-        )
-        .groupby("listing_id", as_index=False)
-        .agg(
-            reviews_count_from_reviews=("id", "size"),
-            average_comment_length=("comment_length", "mean"),
-            review_first_date_from_reviews=("review_date", "min"),
-            review_last_date_from_reviews=("review_date", "max"),
-        )
+def review_summary(
+    reviews: pd.DataFrame,
+    listings: pd.DataFrame,
+) -> pd.DataFrame:
+    """Aggregate total and time-window review counts by listing."""
+    listing_dates = listings[["id", "last_scraped"]].rename(
+        columns={"id": "listing_id", "last_scraped": "listing_last_scraped"}
     )
-    all_ids = pd.DataFrame({"listing_id": listing_ids.astype("int64")})
+    dated_reviews = reviews.assign(
+        comment_length=reviews["comments"].fillna("").astype(str).str.len(),
+        review_date=pd.to_datetime(reviews["date"], errors="coerce"),
+    ).merge(listing_dates, on="listing_id", how="left", validate="many_to_one")
+    dated_reviews["listing_last_scraped"] = pd.to_datetime(
+        dated_reviews["listing_last_scraped"], errors="coerce"
+    )
+    dated_reviews["within_last_30_days"] = (
+        dated_reviews["review_date"].ge(
+            dated_reviews["listing_last_scraped"] - pd.Timedelta(days=30)
+        )
+        & dated_reviews["review_date"].le(dated_reviews["listing_last_scraped"])
+    )
+    dated_reviews["within_last_12_months"] = (
+        dated_reviews["review_date"].ge(
+            dated_reviews["listing_last_scraped"] - pd.DateOffset(years=1)
+        )
+        & dated_reviews["review_date"].le(dated_reviews["listing_last_scraped"])
+    )
+    dated_reviews["within_previous_calendar_year"] = dated_reviews["review_date"].dt.year.eq(
+        dated_reviews["listing_last_scraped"].dt.year - 1
+    )
+    grouped = dated_reviews.groupby("listing_id", as_index=False).agg(
+        reviews_count_from_reviews=("id", "size"),
+        reviews_count_l30d_from_reviews=("within_last_30_days", "sum"),
+        reviews_count_ltm_from_reviews=("within_last_12_months", "sum"),
+        reviews_count_ly_from_reviews=("within_previous_calendar_year", "sum"),
+        average_comment_length=("comment_length", "mean"),
+        review_first_date_from_reviews=("review_date", "min"),
+        review_last_date_from_reviews=("review_date", "max"),
+    )
+    all_ids = pd.DataFrame({"listing_id": listings["id"].astype("int64")})
     result = all_ids.merge(grouped, on="listing_id", how="left")
-    result["reviews_count_from_reviews"] = (
-        result["reviews_count_from_reviews"].fillna(0).astype("int64")
-    )
+    count_columns = [
+        "reviews_count_from_reviews",
+        "reviews_count_l30d_from_reviews",
+        "reviews_count_ltm_from_reviews",
+        "reviews_count_ly_from_reviews",
+    ]
+    result[count_columns] = result[count_columns].fillna(0).astype("int64")
     return result
 
 
@@ -168,6 +201,9 @@ def clean_listings(
 
     # Derive compact, model-ready fields from the source columns.
     cleaned["description_length"] = listings["description"].fillna("").astype(str).str.len()
+    cleaned["listing_last_scraped_date"] = pd.to_datetime(
+        listings["last_scraped"], errors="coerce"
+    ).dt.strftime("%Y-%m-%d")
     cleaned["host_time_as_user_months_count"] = months_from_years_and_months(
         listings["hosts_time_as_user_years"], listings["hosts_time_as_user_months"]
     )
@@ -190,17 +226,44 @@ def clean_listings(
     )
 
     cleaned = cleaned.merge(review_agg, on="listing_id", how="left", validate="one_to_one")
-    cleaned["review_count_difference"] = (
-        cleaned["reviews_count_from_reviews"] - cleaned["number_of_reviews"]
-    )
-    cleaned["review_count_matches"] = cleaned["review_count_difference"].eq(0)
+    review_checks = {
+        "review_count": ("reviews_count_from_reviews", "number_of_reviews"),
+        "review_count_l30d": (
+            "reviews_count_l30d_from_reviews",
+            "number_of_reviews_l30d",
+        ),
+        "review_count_ltm": (
+            "reviews_count_ltm_from_reviews",
+            "number_of_reviews_ltm",
+        ),
+        "review_count_ly": (
+            "reviews_count_ly_from_reviews",
+            "number_of_reviews_ly",
+        ),
+    }
+    for prefix, (from_reviews, from_listings) in review_checks.items():
+        cleaned[f"{prefix}_difference"] = cleaned[from_reviews] - cleaned[from_listings]
+        cleaned[f"{prefix}_matches"] = cleaned[f"{prefix}_difference"].eq(0)
 
     output_order = [
         "listing_id",
+        "listing_last_scraped_date",
         "number_of_reviews",
+        "number_of_reviews_l30d",
+        "number_of_reviews_ltm",
+        "number_of_reviews_ly",
         "reviews_count_from_reviews",
+        "reviews_count_l30d_from_reviews",
+        "reviews_count_ltm_from_reviews",
+        "reviews_count_ly_from_reviews",
         "review_count_difference",
         "review_count_matches",
+        "review_count_l30d_difference",
+        "review_count_l30d_matches",
+        "review_count_ltm_difference",
+        "review_count_ltm_matches",
+        "review_count_ly_difference",
+        "review_count_ly_matches",
         "average_comment_length",
         "review_first_date_from_reviews",
         "review_last_date_from_reviews",
@@ -250,12 +313,56 @@ def clean_listings(
         "candidate_listing_columns": available,
         "retained_listing_columns": retained,
         "dropped_listing_columns_by_missing_share": dropped,
-        "review_count_total_from_reviews": int(cleaned["reviews_count_from_reviews"].sum()),
-        "review_count_total_from_listings": int(cleaned["number_of_reviews"].sum()),
-        "review_count_exact_matches": int(cleaned["review_count_matches"].sum()),
-        "review_count_match_rate": float(cleaned["review_count_matches"].mean()),
-        "review_count_difference_min": int(comparison.min()),
-        "review_count_difference_max": int(comparison.max()),
+        "review_windows": {
+            "total": {
+                "definition": "All review rows for each listing",
+                "source_column": "number_of_reviews",
+                "reviews_count_column": "reviews_count_from_reviews",
+            },
+            "last_30_days": {
+                "definition": "Review date from last_scraped minus 30 days through last_scraped",
+                "source_column": "number_of_reviews_l30d",
+                "reviews_count_column": "reviews_count_l30d_from_reviews",
+            },
+            "last_12_months": {
+                "definition": "Review date from last_scraped minus 12 months through last_scraped",
+                "source_column": "number_of_reviews_ltm",
+                "reviews_count_column": "reviews_count_ltm_from_reviews",
+            },
+            "previous_calendar_year": {
+                "definition": "Review date in the calendar year before last_scraped",
+                "source_column": "number_of_reviews_ly",
+                "reviews_count_column": "reviews_count_ly_from_reviews",
+            },
+        },
+        "review_count_checks": {
+            "total": {
+                "exact_matches": int(cleaned["review_count_matches"].sum()),
+                "match_rate": float(cleaned["review_count_matches"].mean()),
+                "difference_min": int(comparison.min()),
+                "difference_max": int(comparison.max()),
+                "total_from_reviews": int(cleaned["reviews_count_from_reviews"].sum()),
+                "total_from_listings": int(cleaned["number_of_reviews"].sum()),
+            },
+            "last_30_days": {
+                "exact_matches": int(cleaned["review_count_l30d_matches"].sum()),
+                "match_rate": float(cleaned["review_count_l30d_matches"].mean()),
+                "difference_min": int(cleaned["review_count_l30d_difference"].min()),
+                "difference_max": int(cleaned["review_count_l30d_difference"].max()),
+            },
+            "last_12_months": {
+                "exact_matches": int(cleaned["review_count_ltm_matches"].sum()),
+                "match_rate": float(cleaned["review_count_ltm_matches"].mean()),
+                "difference_min": int(cleaned["review_count_ltm_difference"].min()),
+                "difference_max": int(cleaned["review_count_ltm_difference"].max()),
+            },
+            "previous_calendar_year": {
+                "exact_matches": int(cleaned["review_count_ly_matches"].sum()),
+                "match_rate": float(cleaned["review_count_ly_matches"].mean()),
+                "difference_min": int(cleaned["review_count_ly_difference"].min()),
+                "difference_max": int(cleaned["review_count_ly_difference"].max()),
+            },
+        },
     }
     return cleaned, report
 
@@ -265,12 +372,18 @@ def main() -> None:
     listings = pd.read_csv(RAW_DIR / "listings.csv")
     reviews = pd.read_csv(RAW_DIR / "reviews.csv")
 
-    aggregated_reviews = review_summary(reviews, listings["id"])
+    aggregated_reviews = review_summary(reviews, listings)
     cleaned, report = clean_listings(listings, aggregated_reviews, raw_review_rows=len(reviews))
 
-    if report["review_count_match_rate"] != 1.0:
-        raise ValueError("Review counts do not reconcile for every listing.")
-    if report["review_count_total_from_reviews"] != report["review_count_total_from_listings"]:
+    if any(
+        check["match_rate"] != 1.0
+        for check in report["review_count_checks"].values()
+    ):
+        raise ValueError("One or more review-count windows do not reconcile.")
+    if (
+        report["review_count_checks"]["total"]["total_from_reviews"]
+        != report["review_count_checks"]["total"]["total_from_listings"]
+    ):
         raise ValueError("Total review counts do not reconcile.")
 
     cleaned.to_csv(OUTPUT_DIR / "cleaned_listings.csv", index=False)
@@ -280,7 +393,9 @@ def main() -> None:
     )
 
     print(f"Wrote {len(cleaned):,} cleaned listings to {OUTPUT_DIR / 'cleaned_listings.csv'}")
-    print(f"Review count match rate: {report['review_count_match_rate']:.2%}")
+    print("Review count match rates:")
+    for window, check in report["review_count_checks"].items():
+        print(f"  - {window}: {check['match_rate']:.2%}")
     print("Dropped mostly-empty columns:")
     for column, share in report["dropped_listing_columns_by_missing_share"].items():
         print(f"  - {column}: {share:.1%} missing")

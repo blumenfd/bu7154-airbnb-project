@@ -5,6 +5,7 @@
   "cleaned_listing_rows": 6748,
   "candidate_listing_columns": [
     "id",
+    "last_scraped",
     "description",
     "host_id",
     "hosts_time_as_user_years",
@@ -38,6 +39,9 @@
     "availability_90",
     "availability_365",
     "number_of_reviews",
+    "number_of_reviews_ltm",
+    "number_of_reviews_l30d",
+    "number_of_reviews_ly",
     "first_review",
     "last_review",
     "review_scores_rating",
@@ -48,6 +52,7 @@
   ],
   "retained_listing_columns": [
     "id",
+    "last_scraped",
     "description",
     "host_id",
     "hosts_time_as_user_years",
@@ -77,6 +82,9 @@
     "availability_90",
     "availability_365",
     "number_of_reviews",
+    "number_of_reviews_ltm",
+    "number_of_reviews_l30d",
+    "number_of_reviews_ly",
     "first_review",
     "last_review",
     "review_scores_rating",
@@ -91,10 +99,54 @@
     "host_total_listings_count": 1.0,
     "instant_bookable": 1.0
   },
-  "review_count_total_from_reviews": 389071,
-  "review_count_total_from_listings": 389071,
-  "review_count_exact_matches": 6748,
-  "review_count_match_rate": 1.0,
-  "review_count_difference_min": 0,
-  "review_count_difference_max": 0
+  "review_windows": {
+    "total": {
+      "definition": "All review rows for each listing",
+      "source_column": "number_of_reviews",
+      "reviews_count_column": "reviews_count_from_reviews"
+    },
+    "last_30_days": {
+      "definition": "Review date from last_scraped minus 30 days through last_scraped",
+      "source_column": "number_of_reviews_l30d",
+      "reviews_count_column": "reviews_count_l30d_from_reviews"
+    },
+    "last_12_months": {
+      "definition": "Review date from last_scraped minus 12 months through last_scraped",
+      "source_column": "number_of_reviews_ltm",
+      "reviews_count_column": "reviews_count_ltm_from_reviews"
+    },
+    "previous_calendar_year": {
+      "definition": "Review date in the calendar year before last_scraped",
+      "source_column": "number_of_reviews_ly",
+      "reviews_count_column": "reviews_count_ly_from_reviews"
+    }
+  },
+  "review_count_checks": {
+    "total": {
+      "exact_matches": 6748,
+      "match_rate": 1.0,
+      "difference_min": 0,
+      "difference_max": 0,
+      "total_from_reviews": 389071,
+      "total_from_listings": 389071
+    },
+    "last_30_days": {
+      "exact_matches": 6748,
+      "match_rate": 1.0,
+      "difference_min": 0,
+      "difference_max": 0
+    },
+    "last_12_months": {
+      "exact_matches": 6748,
+      "match_rate": 1.0,
+      "difference_min": 0,
+      "difference_max": 0
+    },
+    "previous_calendar_year": {
+      "exact_matches": 6748,
+      "match_rate": 1.0,
+      "difference_min": 0,
+      "difference_max": 0
+    }
+  }
 }
