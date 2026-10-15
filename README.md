@@ -9,4 +9,4 @@
 
 ## Data
 
-The Dublin Inside Airbnb datasets are in [`dublin-data/`](dublin-data/).
+Inside Airbnb source data is stored in [`dublin-data/`](dublin-data/), [`copenhagen-data/`](copenhagen-data/), and [`edinburgh-data/`](edinburgh-data/).

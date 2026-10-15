@@ -144,5 +144,10 @@
       "difference_min": 0,
       "difference_max": 0
     }
+  },
+  "city": "dublin",
+  "source_files": {
+    "listings": "dublin-data/listings.csv",
+    "reviews": "dublin-data/reviews.csv"
   }
 }

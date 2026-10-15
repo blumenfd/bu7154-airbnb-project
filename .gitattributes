@@ -1,2 +1,4 @@
 dublin-data/calendar.csv filter=lfs diff=lfs merge=lfs -text
 dublin-data/reviews.csv filter=lfs diff=lfs merge=lfs -text
+copenhagen-data/*.csv.gz filter=lfs diff=lfs merge=lfs -text
+edinburgh-data/*.csv.gz filter=lfs diff=lfs merge=lfs -text

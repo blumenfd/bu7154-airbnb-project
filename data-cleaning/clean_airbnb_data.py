@@ -1,16 +1,19 @@
-"""Clean the Dublin Inside Airbnb listing and review files.
+"""Clean Inside Airbnb listing and review files for one or more cities.
 
 Run from the repository root with:
 
     python data-cleaning/clean_airbnb_data.py
+    python data-cleaning/clean_airbnb_data.py --city copenhagen
+    python data-cleaning/clean_airbnb_data.py --all
 
-The script writes compact listing-level outputs and a JSON validation report to
-``data-cleaning/output``.
+The script accepts either ``.csv`` or ``.csv.gz`` source files and writes
+compact listing-level outputs plus a JSON validation report.
 """
 
 from __future__ import annotations
 
 import ast
+import argparse
 import json
 import re
 from pathlib import Path
@@ -20,8 +23,12 @@ import pandas as pd
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RAW_DIR = ROOT / "dublin-data"
-OUTPUT_DIR = ROOT / "data-cleaning" / "output"
+DATA_DIRS = {
+    "dublin": ROOT / "dublin-data",
+    "copenhagen": ROOT / "copenhagen-data",
+    "edinburgh": ROOT / "edinburgh-data",
+}
+OUTPUT_ROOT = ROOT / "data-cleaning" / "output"
 MISSINGNESS_THRESHOLD = 0.50
 
 # These are the listing fields that are relevant to booking performance.
@@ -375,13 +382,32 @@ def clean_listings(
     return cleaned, report
 
 
-def main() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    listings = pd.read_csv(RAW_DIR / "listings.csv")
-    reviews = pd.read_csv(RAW_DIR / "reviews.csv")
+def find_input_file(data_dir: Path, stem: str) -> Path:
+    """Find an uncompressed or gzip-compressed source file."""
+    for path in (data_dir / f"{stem}.csv", data_dir / f"{stem}.csv.gz"):
+        if path.exists():
+            return path
+    raise FileNotFoundError(f"Could not find {stem}.csv or {stem}.csv.gz in {data_dir}")
+
+
+def clean_city(city: str, data_dir: Path, output_dir: Path) -> dict:
+    """Run the cleaning and reconciliation workflow for one city."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    listings_path = find_input_file(data_dir, "listings")
+    reviews_path = find_input_file(data_dir, "reviews")
+    listings = pd.read_csv(listings_path)
+    reviews = pd.read_csv(reviews_path)
 
     aggregated_reviews = review_summary(reviews, listings)
     cleaned, report = clean_listings(listings, aggregated_reviews, raw_review_rows=len(reviews))
+    report["city"] = city
+    report["source_files"] = {
+        "listings": str(listings_path.relative_to(ROOT)),
+        "reviews": str(reviews_path.relative_to(ROOT)),
+    }
+    metadata_path = data_dir / "source_metadata.json"
+    if metadata_path.exists():
+        report["source_metadata"] = json.loads(metadata_path.read_text(encoding="utf-8"))
 
     if any(
         check["match_rate"] != 1.0
@@ -394,19 +420,33 @@ def main() -> None:
     ):
         raise ValueError("Total review counts do not reconcile.")
 
-    cleaned.to_csv(OUTPUT_DIR / "cleaned_listings.csv", index=False)
-    aggregated_reviews.to_csv(OUTPUT_DIR / "review_aggregation.csv", index=False)
-    (OUTPUT_DIR / "cleaning_report.json").write_text(
+    cleaned.to_csv(output_dir / "cleaned_listings.csv", index=False)
+    aggregated_reviews.to_csv(output_dir / "review_aggregation.csv", index=False)
+    (output_dir / "cleaning_report.json").write_text(
         json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8"
     )
 
-    print(f"Wrote {len(cleaned):,} cleaned listings to {OUTPUT_DIR / 'cleaned_listings.csv'}")
+    print(f"[{city}] wrote {len(cleaned):,} cleaned listings to {output_dir / 'cleaned_listings.csv'}")
     print("Review count match rates:")
     for window, check in report["review_count_checks"].items():
         print(f"  - {window}: {check['match_rate']:.2%}")
     print("Dropped mostly-empty columns:")
     for column, share in report["dropped_listing_columns_by_missing_share"].items():
         print(f"  - {column}: {share:.1%} missing")
+    return report
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--city", choices=sorted(DATA_DIRS), default="dublin")
+    group.add_argument("--all", action="store_true", help="clean Dublin, Copenhagen, and Edinburgh")
+    args = parser.parse_args()
+
+    cities = sorted(DATA_DIRS) if args.all else [args.city]
+    for city in cities:
+        output_dir = OUTPUT_ROOT if city == "dublin" else OUTPUT_ROOT / city
+        clean_city(city, DATA_DIRS[city], output_dir)
 
 
 if __name__ == "__main__":

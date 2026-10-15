@@ -1,46 +1,68 @@
-# Dublin Airbnb data cleaning
+# Airbnb data cleaning
 
-This folder contains a simple pandas workflow that prepares Airbnb listings for listing-level analysis.
+This folder contains a pandas workflow for preparing Dublin, Copenhagen, and Edinburgh Inside Airbnb data for listing-level analysis.
 
-## Run it
+## Run the workflow
 
-From the repository root:
+Run from the repository root:
 
 ```bash
-python data-cleaning/clean_airbnb_data.py
+python data-cleaning/clean_airbnb_data.py --city dublin
+python data-cleaning/clean_airbnb_data.py --city copenhagen
+python data-cleaning/clean_airbnb_data.py --city edinburgh
 ```
 
-The script reads:
+To process all three cities:
+
+```bash
+python data-cleaning/clean_airbnb_data.py --all
+```
+
+The script accepts both `.csv` and `.csv.gz` input files. It does not change the raw data.
+
+### Input data
+
+| City | Source folder | Snapshot |
+|---|---|---|
+| Dublin | `dublin-data/` | Existing project data |
+| Copenhagen | `copenhagen-data/` | 25 September 2026 |
+| Edinburgh | `edinburgh-data/` | 19 September 2026 |
+
+Each city folder contains `listings` and `reviews` files. The downloaded city folders also contain `source_metadata.json` with the source URLs.
+
+### Output data
+
+Dublin outputs are written to `data-cleaning/output/`. Copenhagen and Edinburgh outputs are written to their own subfolders:
 
 ```text
-dublin-data/listings.csv
-dublin-data/reviews.csv
+data-cleaning/output/
+data-cleaning/output/copenhagen/
+data-cleaning/output/edinburgh/
 ```
 
-It creates:
+Each output folder contains:
 
 ```text
-data-cleaning/output/cleaned_listings.csv
-data-cleaning/output/review_aggregation.csv
-data-cleaning/output/cleaning_report.json
+cleaned_listings.csv
+review_aggregation.csv
+cleaning_report.json
 ```
-
-The original source files are not changed.
 
 ## Cleaning steps
 
-1. Keep fields related to host, listing, price, location, availability, reviews, and booking performance.
+1. Keep fields related to hosts, listings, price, location, availability, reviews, and booking performance.
 2. Drop candidate fields with more than 50% missing values.
 3. Convert `amenities` into `amenities_count`.
 4. Combine host tenure fields into month counts.
 5. Convert price and bathroom text into numeric fields.
-6. Keep the full `description` text and create a separate `description_length` feature.
-7. Aggregate reviews by `listing_id` before joining them to listings.
-8. Compare total, last-30-day, last-12-month, and previous-calendar-year review counts with the listing file.
+6. Keep the full `description` text and create `description_length`.
+7. Add `maximum_nights_bucket` and `allows_long_stays` while retaining raw `maximum_nights`.
+8. Aggregate reviews by `listing_id` before joining them to listings.
+9. Compare total, last-30-day, last-12-month, and previous-calendar-year review counts with the listing file.
 
 ## Dropped columns
 
-These five candidate columns are completely empty in the current data snapshot:
+These candidate columns are completely empty in the current snapshots:
 
 - `host_response_time`
 - `host_response_rate`
@@ -48,38 +70,23 @@ These five candidate columns are completely empty in the current data snapshot:
 - `host_total_listings_count`
 - `instant_bookable`
 
-Other metadata and unrelated fields are excluded by the useful-feature selection.
-
-`latitude` and `longitude` are also excluded from the cleaned listing table.
+`latitude` and `longitude` are also excluded from the cleaned listing table. Other metadata and unrelated fields are excluded by the useful-feature selection.
 
 ## Transformed columns
 
 | Source column(s) | Output column |
 |---|---|
-| `description` | Kept as full text; `description_length` is added as a separate feature |
+| `description` | Kept as full text; `description_length` is added |
 | `hosts_time_as_user_years`, `hosts_time_as_user_months` | `host_time_as_user_months_count` |
 | `hosts_time_as_host_years`, `hosts_time_as_host_months` | `host_time_as_host_months_count` |
 | `amenities` | `amenities_count` |
 | `price` | `price_numeric` |
 | `bathrooms_text` | `bathrooms_count` |
-| `maximum_nights` | Kept as raw value; `maximum_nights_bucket` and `allows_long_stays` are added |
+| `maximum_nights` | Raw value plus `maximum_nights_bucket` and `allows_long_stays` |
 | `first_review`, `last_review` | `first_review_date`, `last_review_date` |
 | `last_scraped` | `listing_last_scraped_date` |
 
-The transformed source columns above are removed from the cleaned output after transformation. The original `description` text is retained.
-
-The cleaned listing table does not include review audit fields such as `reviews_count_from_*`, difference columns, or match columns. Those checks remain in `cleaning_report.json` and `review_aggregation.csv` so the data can still be verified.
-
-## `maximum_nights` check
-
-The current source has 6,723 non-missing values. There are no zero or negative values. The distribution is concentrated at platform-style limits:
-
-- 2,418 listings have `maximum_nights = 365`.
-- 1,644 listings have `maximum_nights = 1125`.
-- 42 listings have `maximum_nights = 999`.
-- 43 listings have `maximum_nights = 730`.
-
-The maximum value is 1,125. These values look like booking-policy caps rather than obvious data errors. The cleaned output keeps the raw value for traceability and adds `maximum_nights_bucket` plus `allows_long_stays`. Use the bucket or indicator in modeling instead of relying on the raw highly skewed value.
+The cleaned listing table does not include review audit fields such as `reviews_count_from_*`, difference columns, or match columns. Those checks remain in `cleaning_report.json` and `review_aggregation.csv`.
 
 ## Review-count checks
 
@@ -90,22 +97,19 @@ The script uses each listing's `last_scraped` date as the reference date:
 - `number_of_reviews_ltm`: reviews in the previous 12 months
 - `number_of_reviews_ly`: reviews in the previous calendar year
 
-For each period, it calculates the difference from the listing file:
+For each period, it compares the count calculated from `reviews.csv` with the value in `listings.csv`. The script stops if any listing fails a check.
 
-```python
-cleaned["review_count_l30d_difference"] = (
-    cleaned["reviews_count_l30d_from_reviews"]
-    - cleaned["number_of_reviews_l30d"]
-)
-cleaned["review_count_l30d_matches"] = (
-    cleaned["review_count_l30d_difference"].eq(0)
-)
-```
+Current results:
 
-The script stops if any listing fails a check. The current snapshot has 6,748 exact matches for every period. The total review count is 389,071 in both files.
+| City | Listings | Reviews | Match rate for all four checks |
+|---|---:|---:|---:|
+| Dublin | 6,748 | 389,071 | 100% |
+| Copenhagen | 22,845 | 495,775 | 100% |
+| Edinburgh | 6,342 | 714,112 | 100% |
 
-## Points to confirm
+## Modeling notes
 
-- Is the 50% missingness cutoff suitable?
-- Should review scores and other review-derived fields be excluded from predictive models to avoid target leakage?
-- Should a sentiment feature be added for `comments`? If so, which method and threshold should be used?
+- Use the `maximum_nights_bucket` or `allows_long_stays` feature instead of relying only on raw `maximum_nights`.
+- Review scores and review-derived fields may cause target leakage if they were recorded after the booking outcome. Consider this before predictive modeling.
+- The raw `description` is retained for text analysis. If no text analysis is planned, `description_length` may be enough.
+- No sentiment feature is created because a sentiment method and threshold have not been selected.
