@@ -215,7 +215,6 @@ def clean_listings(
     last_review = pd.to_datetime(listings["last_review"], errors="coerce")
     cleaned["first_review_date"] = first_review.dt.strftime("%Y-%m-%d")
     cleaned["last_review_date"] = last_review.dt.strftime("%Y-%m-%d")
-    cleaned["review_span_days"] = (last_review - first_review).dt.days
 
     cleaned = cleaned.drop(
         columns=[column for column in TRANSFORMED_SOURCE_COLUMNS if column in cleaned.columns],
@@ -283,7 +282,6 @@ def clean_listings(
         "availability_365",
         "first_review_date",
         "last_review_date",
-        "review_span_days",
         "review_scores_rating",
         "review_scores_cleanliness",
         "review_scores_communication",

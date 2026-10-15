@@ -62,12 +62,23 @@ Other metadata and unrelated fields are excluded by the useful-feature selection
 | `amenities` | `amenities_count` |
 | `price` | `price_numeric` |
 | `bathrooms_text` | `bathrooms_count` |
-| `first_review`, `last_review` | `first_review_date`, `last_review_date`, `review_span_days` |
+| `first_review`, `last_review` | `first_review_date`, `last_review_date` |
 | `last_scraped` | `listing_last_scraped_date` |
 
 The transformed source columns above are removed from the cleaned output after transformation. The original `description` text is retained.
 
 The cleaned listing table does not include review audit fields such as `reviews_count_from_*`, difference columns, or match columns. Those checks remain in `cleaning_report.json` and `review_aggregation.csv` so the data can still be verified.
+
+## `maximum_nights` check
+
+The current source has 6,723 non-missing values. There are no zero or negative values. The distribution is concentrated at platform-style limits:
+
+- 2,418 listings have `maximum_nights = 365`.
+- 1,644 listings have `maximum_nights = 1125`.
+- 42 listings have `maximum_nights = 999`.
+- 43 listings have `maximum_nights = 730`.
+
+The maximum value is 1,125. These values look like booking-policy caps rather than obvious data errors. For modeling, consider treating `maximum_nights` as a capped or grouped policy feature instead of using the raw highly skewed value. No change has been made yet.
 
 ## Review-count checks
 
