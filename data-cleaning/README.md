@@ -70,7 +70,7 @@ These candidate columns are completely empty in the current snapshots:
 - `host_total_listings_count`
 - `instant_bookable`
 
-`latitude` and `longitude` are also excluded from the cleaned listing table. Other metadata and unrelated fields are excluded by the useful-feature selection.
+`latitude` and `longitude` are retained because location may be useful for spatial analysis and neighbourhood comparisons. Other metadata and unrelated fields are excluded by the useful-feature selection.
 
 ## Transformed columns
 
