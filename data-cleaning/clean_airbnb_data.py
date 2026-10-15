@@ -210,6 +210,26 @@ def clean_listings(
     cleaned["amenities_count"] = listings["amenities"].map(parse_amenities).astype("int64")
     cleaned["price_numeric"] = listings["price"].map(parse_price)
     cleaned["bathrooms_count"] = listings["bathrooms_text"].map(parse_bathrooms)
+    maximum_nights = pd.to_numeric(listings["maximum_nights"], errors="coerce")
+    maximum_nights_bins = [-1, 7, 30, 90, 365, 730, 999, float("inf")]
+    maximum_nights_labels = [
+        "1-7",
+        "8-30",
+        "31-90",
+        "91-365",
+        "366-730",
+        "731-999",
+        "1000+",
+    ]
+    cleaned["maximum_nights_bucket"] = (
+        pd.cut(maximum_nights, bins=maximum_nights_bins, labels=maximum_nights_labels)
+        .astype("string")
+        .fillna("Unknown")
+    )
+    cleaned["allows_long_stays"] = pd.Series(
+        pd.array(maximum_nights.gt(365).where(maximum_nights.notna()), dtype="Int64"),
+        index=cleaned.index,
+    )
 
     first_review = pd.to_datetime(listings["first_review"], errors="coerce")
     last_review = pd.to_datetime(listings["last_review"], errors="coerce")
@@ -275,6 +295,8 @@ def clean_listings(
         "beds",
         "minimum_nights",
         "maximum_nights",
+        "maximum_nights_bucket",
+        "allows_long_stays",
         "has_availability",
         "availability_30",
         "availability_60",

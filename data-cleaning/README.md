@@ -62,6 +62,7 @@ Other metadata and unrelated fields are excluded by the useful-feature selection
 | `amenities` | `amenities_count` |
 | `price` | `price_numeric` |
 | `bathrooms_text` | `bathrooms_count` |
+| `maximum_nights` | Kept as raw value; `maximum_nights_bucket` and `allows_long_stays` are added |
 | `first_review`, `last_review` | `first_review_date`, `last_review_date` |
 | `last_scraped` | `listing_last_scraped_date` |
 
@@ -78,7 +79,7 @@ The current source has 6,723 non-missing values. There are no zero or negative v
 - 42 listings have `maximum_nights = 999`.
 - 43 listings have `maximum_nights = 730`.
 
-The maximum value is 1,125. These values look like booking-policy caps rather than obvious data errors. For modeling, consider treating `maximum_nights` as a capped or grouped policy feature instead of using the raw highly skewed value. No change has been made yet.
+The maximum value is 1,125. These values look like booking-policy caps rather than obvious data errors. The cleaned output keeps the raw value for traceability and adds `maximum_nights_bucket` plus `allows_long_stays`. Use the bucket or indicator in modeling instead of relying on the raw highly skewed value.
 
 ## Review-count checks
 
