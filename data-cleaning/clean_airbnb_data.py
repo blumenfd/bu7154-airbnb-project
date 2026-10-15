@@ -44,8 +44,6 @@ USEFUL_LISTING_COLUMNS = [
     "host_has_profile_pic",
     "host_identity_verified",
     "neighbourhood_cleansed",
-    "latitude",
-    "longitude",
     "property_type",
     "room_type",
     "accommodates",
@@ -76,7 +74,6 @@ USEFUL_LISTING_COLUMNS = [
 
 # Raw columns replaced by clearer derived features below.
 TRANSFORMED_SOURCE_COLUMNS = {
-    "description",
     "hosts_time_as_user_years",
     "hosts_time_as_user_months",
     "hosts_time_as_host_years",
@@ -245,29 +242,22 @@ def clean_listings(
         cleaned[f"{prefix}_difference"] = cleaned[from_reviews] - cleaned[from_listings]
         cleaned[f"{prefix}_matches"] = cleaned[f"{prefix}_difference"].eq(0)
 
+    # Keep audit fields in memory for validation, but leave them out of the
+    # cleaned listing table returned to downstream analysis.
+    audit = cleaned.copy()
+
     output_order = [
         "listing_id",
         "listing_last_scraped_date",
+        "description",
+        "description_length",
         "number_of_reviews",
         "number_of_reviews_l30d",
         "number_of_reviews_ltm",
         "number_of_reviews_ly",
-        "reviews_count_from_reviews",
-        "reviews_count_l30d_from_reviews",
-        "reviews_count_ltm_from_reviews",
-        "reviews_count_ly_from_reviews",
-        "review_count_difference",
-        "review_count_matches",
-        "review_count_l30d_difference",
-        "review_count_l30d_matches",
-        "review_count_ltm_difference",
-        "review_count_ltm_matches",
-        "review_count_ly_difference",
-        "review_count_ly_matches",
         "average_comment_length",
         "review_first_date_from_reviews",
         "review_last_date_from_reviews",
-        "description_length",
         "amenities_count",
         "price_numeric",
         "bathrooms_count",
@@ -279,8 +269,6 @@ def clean_listings(
         "host_has_profile_pic",
         "host_identity_verified",
         "neighbourhood_cleansed",
-        "latitude",
-        "longitude",
         "property_type",
         "room_type",
         "accommodates",
@@ -304,7 +292,7 @@ def clean_listings(
     output_order = [column for column in output_order if column in cleaned.columns]
     cleaned = cleaned[output_order]
 
-    comparison = cleaned["review_count_difference"]
+    comparison = audit["review_count_difference"]
     report = {
         "missingness_threshold": MISSINGNESS_THRESHOLD,
         "raw_listing_rows": int(len(listings)),
@@ -337,30 +325,30 @@ def clean_listings(
         },
         "review_count_checks": {
             "total": {
-                "exact_matches": int(cleaned["review_count_matches"].sum()),
-                "match_rate": float(cleaned["review_count_matches"].mean()),
+                "exact_matches": int(audit["review_count_matches"].sum()),
+                "match_rate": float(audit["review_count_matches"].mean()),
                 "difference_min": int(comparison.min()),
                 "difference_max": int(comparison.max()),
-                "total_from_reviews": int(cleaned["reviews_count_from_reviews"].sum()),
+                "total_from_reviews": int(audit["reviews_count_from_reviews"].sum()),
                 "total_from_listings": int(cleaned["number_of_reviews"].sum()),
             },
             "last_30_days": {
-                "exact_matches": int(cleaned["review_count_l30d_matches"].sum()),
-                "match_rate": float(cleaned["review_count_l30d_matches"].mean()),
-                "difference_min": int(cleaned["review_count_l30d_difference"].min()),
-                "difference_max": int(cleaned["review_count_l30d_difference"].max()),
+                "exact_matches": int(audit["review_count_l30d_matches"].sum()),
+                "match_rate": float(audit["review_count_l30d_matches"].mean()),
+                "difference_min": int(audit["review_count_l30d_difference"].min()),
+                "difference_max": int(audit["review_count_l30d_difference"].max()),
             },
             "last_12_months": {
-                "exact_matches": int(cleaned["review_count_ltm_matches"].sum()),
-                "match_rate": float(cleaned["review_count_ltm_matches"].mean()),
-                "difference_min": int(cleaned["review_count_ltm_difference"].min()),
-                "difference_max": int(cleaned["review_count_ltm_difference"].max()),
+                "exact_matches": int(audit["review_count_ltm_matches"].sum()),
+                "match_rate": float(audit["review_count_ltm_matches"].mean()),
+                "difference_min": int(audit["review_count_ltm_difference"].min()),
+                "difference_max": int(audit["review_count_ltm_difference"].max()),
             },
             "previous_calendar_year": {
-                "exact_matches": int(cleaned["review_count_ly_matches"].sum()),
-                "match_rate": float(cleaned["review_count_ly_matches"].mean()),
-                "difference_min": int(cleaned["review_count_ly_difference"].min()),
-                "difference_max": int(cleaned["review_count_ly_difference"].max()),
+                "exact_matches": int(audit["review_count_ly_matches"].sum()),
+                "match_rate": float(audit["review_count_ly_matches"].mean()),
+                "difference_min": int(audit["review_count_ly_difference"].min()),
+                "difference_max": int(audit["review_count_ly_difference"].max()),
             },
         },
     }

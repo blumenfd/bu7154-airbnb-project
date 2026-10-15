@@ -34,7 +34,7 @@ The original source files are not changed.
 3. Convert `amenities` into `amenities_count`.
 4. Combine host tenure fields into month counts.
 5. Convert price and bathroom text into numeric fields.
-6. Create description length and review span features.
+6. Keep the full `description` text and create a separate `description_length` feature.
 7. Aggregate reviews by `listing_id` before joining them to listings.
 8. Compare total, last-30-day, last-12-month, and previous-calendar-year review counts with the listing file.
 
@@ -50,11 +50,13 @@ These five candidate columns are completely empty in the current data snapshot:
 
 Other metadata and unrelated fields are excluded by the useful-feature selection.
 
+`latitude` and `longitude` are also excluded from the cleaned listing table.
+
 ## Transformed columns
 
 | Source column(s) | Output column |
 |---|---|
-| `description` | `description_length` |
+| `description` | Kept as full text; `description_length` is added as a separate feature |
 | `hosts_time_as_user_years`, `hosts_time_as_user_months` | `host_time_as_user_months_count` |
 | `hosts_time_as_host_years`, `hosts_time_as_host_months` | `host_time_as_host_months_count` |
 | `amenities` | `amenities_count` |
@@ -63,7 +65,9 @@ Other metadata and unrelated fields are excluded by the useful-feature selection
 | `first_review`, `last_review` | `first_review_date`, `last_review_date`, `review_span_days` |
 | `last_scraped` | `listing_last_scraped_date` |
 
-The original source columns above are removed from the cleaned output after transformation.
+The transformed source columns above are removed from the cleaned output after transformation. The original `description` text is retained.
+
+The cleaned listing table does not include review audit fields such as `reviews_count_from_*`, difference columns, or match columns. Those checks remain in `cleaning_report.json` and `review_aggregation.csv` so the data can still be verified.
 
 ## Review-count checks
 
